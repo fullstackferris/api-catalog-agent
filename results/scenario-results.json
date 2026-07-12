@@ -1,0 +1,176 @@
+[
+  {
+    "id": "S01",
+    "type": "qa",
+    "prompt": "Which payment APIs are production-ready?",
+    "toolsCalled": [
+      "queryCatalog"
+    ],
+    "response": "The production-ready Payment APIs are:\n\n- **payments-api** — REST, 14 endpoints, gateway: `kong-prod`\n- **payouts-api** — REST, 9 endpoints, gateway: `kong-prod`\n- **ledger-api** — gRPC, 11 endpoints, gateway: `internal-mesh`\n- **fx-rates-api** — REST, 4 endpoints, gateway: `apigee-edge`\n\nIf you want, I can also narrow this down by:\n- externally exposed only\n- APIs with OpenAPI specs\n- APIs with no gateway\n- production payment APIs by tag or dependency",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 2392,
+      "toolCallCount": 1,
+      "latencyMs": 2616
+    }
+  },
+  {
+    "id": "S02",
+    "type": "qa",
+    "prompt": "What depends on the ledger-api? I want to know what breaks if I take it down.",
+    "toolsCalled": [
+      "queryCatalog"
+    ],
+    "response": "Here’s what depends on `ledger-api`, so these are the likely breakpoints if it goes down:\n\n- `payments-api` — production, Payments domain\n- `payouts-api` — production, Payments domain\n- `refunds-api` — beta, Payments domain\n- `invoicing-api` — production, Finance domain\n- `loyalty-rewards-api` — production, Loyalty domain\n- `points-api` — production, Loyalty domain\n- `gift-cards-api` — production, Loyalty domain\n\nAssumption: you meant **reverse dependencies** (“what uses `ledger-api`?”), which is what I checked.\n\nIf you want, I can also break this down by:\n- **production vs beta**\n- **domain**\n- **which ones are external-facing**\n- **which are most critical to take down first**",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 2687,
+      "toolCallCount": 1,
+      "latencyMs": 2162
+    }
+  },
+  {
+    "id": "S03",
+    "type": "qa",
+    "prompt": "Which APIs are exposed externally but not behind a gateway?",
+    "toolsCalled": [
+      "queryCatalog"
+    ],
+    "response": "The APIs exposed externally but not behind a gateway are:\n\n- **fleet-api** — Logistics, development, MQTT\n- **analytics-events-api** — Analytics, production, Kafka\n\nAssumption: I interpreted “exposed externally” as APIs with **no gateway** configured.",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 2176,
+      "toolCallCount": 1,
+      "latencyMs": 1538
+    }
+  },
+  {
+    "id": "S04",
+    "type": "qa",
+    "prompt": "Which deprecated APIs are still being depended on by active APIs?",
+    "toolsCalled": [
+      "queryCatalog",
+      "queryCatalog",
+      "queryCatalog"
+    ],
+    "response": "I interpreted your question as: “Which APIs are marked **deprecated** and are still listed as dependencies of currently active APIs?”\n\nFrom the catalog, the deprecated APIs are:\n- `reviews-api`\n- `referrals-api`\n- `geocoding-api`\n\nI then checked for active APIs that depend on them, but found **no production APIs** currently listing any of those deprecated APIs in their dependencies.\n\nSo the answer is: **none found**.\n\nAssumption I made: “active” means `status: production`. If you want, I can also check `beta` or `development` APIs for dependencies on these deprecated services.",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 4900,
+      "toolCallCount": 3,
+      "latencyMs": 3445
+    }
+  },
+  {
+    "id": "S05",
+    "type": "qa",
+    "prompt": "I'm building a feature that sends a customer an SMS when their order ships. Which APIs do I need?",
+    "toolsCalled": [
+      "queryCatalog",
+      "queryCatalog"
+    ],
+    "response": "For an “send an SMS when an order ships” feature, the likely APIs are:\n\n- **shipping-api** — to detect or fetch shipping/shipment status for the order\n- **sms-api** — to send the text message to the customer\n- **customer-api** — if you need the customer’s phone number or customer record\n- **customer-consent-api** — if you need to verify SMS marketing/notification consent before sending\n\nAssumption: you want to send a shipment notification, not a marketing SMS.\n\nA typical flow would be:\n1. Use **shipping-api** to determine when the order is shipped.\n2. Use **customer-api** to get the customer’s contact info.\n3. Use **customer-consent-api** to confirm you’re allowed to text them.\n4. Use **sms-api** to send the message.\n\nIf you want, I can also help map the exact dependency chain or identify which of these APIs have OpenAPI specs available.",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 3766,
+      "toolCallCount": 2,
+      "latencyMs": 3517
+    }
+  },
+  {
+    "id": "S06",
+    "type": "assess",
+    "prompt": "What's wrong with the inventory-api spec? Give me concrete fixes.",
+    "toolsCalled": [
+      "listSpecs",
+      "scoreSpec",
+      "suggestImprovements",
+      "loadSpec"
+    ],
+    "response": "I checked `inventory-api` and found these issues in the spec.\n\nScore: 76/100\n\nWhat’s wrong\n- Missing descriptions on operations, parameters, and schema properties\n- Missing request/response examples\n- Some operations lack declared client/server error responses\n- Spec metadata is incomplete\n\nConcrete fixes\n\n1. Add descriptions to every operation\nAffected operations include:\n- `GET /stock`\n- `GET /stock/{sku}`\n- `GET /stock/{sku}/adjustments`\n- `POST /stock/{sku}/adjustments`\n- `GET /warehouses`\n- `GET /warehouses/{warehouseId}/stock`\n\nFix:\n- Add a `description` field to each operation, not just `summary`.\n- Also add descriptions for every query/path parameter and every schema property.\n\nExample:\n```yaml\npaths:\n  /stock:\n    get:\n      summary: List stock levels\n      description: Returns paginated stock levels across warehouses, optionally filtered by warehouse.\n```\n\nFor parameters:\n```yaml\nparameters:\n  - name: warehouseId\n    in: query\n    description: Filter stock levels by warehouse ID.\n```\n\nFor schema properties:\n```yaml\nStockLevel:\n  properties:\n    quantityOnHand:\n      type: integer\n      description: Units physically available in the warehouse.\n```\n\n2. Add examples for request and response bodies\nMost likely missing on the `POST /stock/{sku}/adjustments` request body and 2xx responses.\n\nFix:\n- Add at least one `example` or `examples` to each request body schema and each 2xx response payload.\n- Include realistic inventory values.\n\nExample:\n```yaml\nrequestBody:\n  required: true\n  content:\n    application/json:\n      schema:\n        $ref: '#/components/schemas/AdjustmentRequest'\n      example:\n        warehouseId: wh-123\n        delta: -5\n        reason: damaged goods\n```\n\nFor response:\n```yaml\nresponses:\n  201:\n    description: Created\n    content:\n      application/json:\n        schema:\n          $ref: '#/components/schemas/Adjustment'\n        example:\n          adjustmentId: adj-789\n          sku: SKU-001\n          warehouseId: wh-123\n          delta: -5\n          reason: damaged goods\n          createdAt: \"2026-07-12T10:30:00Z\"\n```\n\n3. Declare missing error responses\nSome operations have partial error coverage. Mutating operations especially should include relevant 4xx and, where appropriate, 5xx responses.\n\nFix:\n- Ensure every operation includes at least one 4xx response.\n- For `POST /stock/{sku}/adjustments`, consider adding `409 Conflict` if invalid stock adjustments can occur.\n- Consider `500`/`503` for server-side or dependency failures if your API conventions require them.\n\nExample:\n```yaml\nresponses:\n  400:\n    description: Bad Request\n  401:\n    description: Unauthorized\n  404:\n    description: Not Found\n  409:\n    description: Conflict - adjustment would make inventory inconsistent\n  500:\n    description: Internal Server Error\n```\n\n4. Complete the API metadata\nYour spec currently has:\n- `info.title`\n- `info.version`\n- `servers[0]`\n\nBut it is missing `info.contact`.\n\nFix:\n```yaml\ninfo:\n  title: Inventory API\n  version: 1.0.0\n  contact:\n    name: Inventory Platform Team\n    email: inventory-platform@example.com\n```\n\n5. Add missing descriptions to schema properties\nLikely affected schemas:\n- `StockLevel`\n- `Warehouse`\n- `Adjustment`\n- `AdjustmentRequest`\n- `Error`\n\nFix:\n- Add a `description` to every property, including IDs, quantities, timestamps, flags, and error fields.\n\nExample:\n```yaml\nAdjustment:\n  type: object\n  properties:\n    delta:\n      type: integer\n      description: Quantity change applied to stock; negative values reduce inventory.\n```\n\nPriority order\n1. Add `info.contact`\n2. Add operation descriptions\n3. Add parameter/property descriptions\n4. Add examples for request/response payloads\n5. Add any missing error responses, especially for `POST /stock/{sku}/adjustments`\n\nIf you want, I can turn this into a path-by-path patch plan for the exact endpoints in `inventory-api`.",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 8338,
+      "toolCallCount": 4,
+      "latencyMs": 7724
+    }
+  },
+  {
+    "id": "S07",
+    "type": "assess",
+    "prompt": "Does the shipping-api spec have any security problems?",
+    "toolsCalled": [
+      "listSpecs",
+      "scoreSpec",
+      "suggestImprovements"
+    ],
+    "response": "Yes — the `shipping-api` spec has security issues.\n\nWhat I found:\n- Overall score: 46\n- Security-related violated rules:\n  - `SEC-01`: no security schemes defined\n  - `SEC-02`: operations are not all protected by authentication\n  - `SEC-03`: transport/examples are not fully safe\n\nWhat that means in practice:\n- The spec is missing at least one `components.securitySchemes` entry.\n- Some endpoints are not covered by a global `security` requirement or per-operation auth.\n- There may be insecure server URLs or risky example values in the spec.\n\nConcrete fixes to make:\n1. Add a security scheme under `components.securitySchemes`\n   - For example, define OAuth2, bearer auth, or API key auth depending on how the API is actually secured.\n\n2. Apply authentication to all protected operations\n   - Add a top-level `security` block if most endpoints require auth.\n   - Override only truly public endpoints with `security: []`.\n\n3. Ensure transport and examples are safe\n   - Use `https://` for all `servers.url` values.\n   - Remove any real-looking tokens, keys, or sensitive PII from examples.\n\nIf you want, I can also summarize the non-security issues in this spec (`DOC-02`, `DOC-03`, `CMP-01`).",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 4791,
+      "toolCallCount": 3,
+      "latencyMs": 4058
+    }
+  },
+  {
+    "id": "S08",
+    "type": "assess",
+    "prompt": "Rank all the specs from best to worst quality.",
+    "toolsCalled": [
+      "listSpecs",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec",
+      "scoreSpec"
+    ],
+    "response": "Here’s the ranking of all available specs from best to worst quality, based on their OpenAPI quality scores:\n\n1. **payments-api** — 89\n2. **analytics-events-api** — 86\n3. **orders-api** — 84\n4. **identity-api** — 78\n5. **fraud-detection-api** — 76\n6. **inventory-api** — 76\n7. **loyalty-rewards-api** — 68\n8. **notifications-api** — 68\n9. **customer-api** — 59\n10. **shipping-api** — 46\n\nA few notes:\n- **fraud-detection-api** and **inventory-api** are tied at 76.\n- **loyalty-rewards-api** and **notifications-api** are tied at 68.\n\nIf you want, I can also:\n- break down **why** each spec scored where it did, or\n- generate a **priority list of the top fixes** across the lowest-scoring specs.",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 4021,
+      "toolCallCount": 11,
+      "latencyMs": 3232
+    }
+  },
+  {
+    "id": "S09",
+    "type": "ambiguous",
+    "prompt": "Is the billing API any good?",
+    "toolsCalled": [
+      "listSpecs",
+      "queryCatalog",
+      "scoreSpec",
+      "suggestImprovements",
+      "suggestImprovements"
+    ],
+    "response": "Assuming you mean **payments-api** as the closest match to “billing API”:\n\n- **Score:** 89/100\n- **Verdict:** Yes, it looks pretty good overall.\n\nWhat’s going well:\n- It’s a production API\n- It has an OpenAPI spec available\n- The score is fairly high, so the spec is in decent shape\n\nIssues I found:\n- **DOC-02:** Some parameters or schema properties are missing descriptions\n- **CMP-01:** Error responses aren’t fully declared, especially 4xx responses for all operations and relevant errors for mutating operations\n\nPractical takeaway:\n- The API is solid, but the spec would benefit from better documentation and more complete error modeling.\n\nIf you want, I can also assess the related **invoicing-api** or **subscriptions-api** billing APIs, which may be even closer to what you mean by “billing.”",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 7701,
+      "toolCallCount": 5,
+      "latencyMs": 4407
+    }
+  },
+  {
+    "id": "S10",
+    "type": "ambiguous",
+    "prompt": "Give me the spec for the search service so I can call its checkout endpoint.",
+    "toolsCalled": [
+      "queryCatalog",
+      "queryCatalog",
+      "listSpecs"
+    ],
+    "response": "I interpreted your request as: “Get the API spec for the search service, and I want to use it to call a checkout endpoint.”\n\nWhat I found:\n- Closest match for **search service**: **search-api**\n  - Domain: Catalog\n  - Status: production\n  - Protocol: REST\n  - Gateway: apigee-edge\n- A separate API for **checkout** exists: **checkout-api**\n  - Domain: Orders\n  - Status: beta\n  - Protocol: REST\n  - Gateway: kong-prod\n\nImportant note:\n- I **could not load a spec for `search-api`** because it is **not listed among available OpenAPI specs**.\n- Also, the **checkout endpoint is not on the search service** based on the catalog results; it appears to belong to **checkout-api** instead.\n\nAvailable specs in the catalog include:\n- orders-api\n- payments-api\n- shipping-api\n- inventory-api\n- and others, but **not search-api**\n\nAssumptions I made:\n- “search service” refers to **search-api**\n- “checkout endpoint” refers to the API named **checkout-api**, not an endpoint inside search-api\n\nIf you want, I can help you with one of these next:\n1. Find the **closest spec that does exist** for checkout-related flows, or\n2. Inspect **orders-api / payments-api / shipping-api** specs if you want the actual checkout sequence.",
+    "meta": {
+      "model": "gpt-5.4-mini",
+      "tokensUsed": 4797,
+      "toolCallCount": 3,
+      "latencyMs": 5048
+    }
+  }
+]
